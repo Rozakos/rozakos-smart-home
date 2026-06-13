@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.Bluetooth
 import androidx.compose.material.icons.outlined.OpenInBrowser
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -42,6 +43,7 @@ fun AddDeviceScreen(
     viewModel: AddDeviceViewModel,
     onBack: () -> Unit,
     onDeviceAdded: () -> Unit,
+    onStartBleOnboarding: () -> Unit,
     onOpenSetupPortal: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -109,6 +111,37 @@ fun AddDeviceScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodyMedium,
                             )
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionTitle("Quick setup")
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                    shape = MaterialTheme.shapes.medium,
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            "Set up over Bluetooth",
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        )
+                        Text(
+                            "Send your WiFi details to a nearby device over Bluetooth — no network switching or IP address needed.",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Button(
+                            onClick = onStartBleOnboarding,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Icon(Icons.Outlined.Bluetooth, contentDescription = null)
+                            Text("Start Bluetooth setup", modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                 }

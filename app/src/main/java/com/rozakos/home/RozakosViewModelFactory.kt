@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import com.rozakos.home.ui.adddevice.AddDeviceViewModel
 import com.rozakos.home.ui.device.DeviceDetailViewModel
 import com.rozakos.home.ui.home.HomeViewModel
+import com.rozakos.home.ui.onboarding.BleOnboardingViewModel
 
 class RozakosViewModelFactory(
     private val container: AppContainer,
@@ -17,6 +18,9 @@ class RozakosViewModelFactory(
 
             modelClass.isAssignableFrom(AddDeviceViewModel::class.java) ->
                 AddDeviceViewModel(container.addDeviceUseCase) as T
+
+            modelClass.isAssignableFrom(BleOnboardingViewModel::class.java) ->
+                BleOnboardingViewModel(container.bleProvisioningService, container.addDeviceUseCase) as T
 
             modelClass.isAssignableFrom(DeviceDetailViewModel::class.java) ->
                 DeviceDetailViewModel(container.deviceRepository, container.statusChecker) as T

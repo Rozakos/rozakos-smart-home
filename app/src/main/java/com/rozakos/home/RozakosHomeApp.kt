@@ -1,6 +1,8 @@
 package com.rozakos.home
 
 import android.app.Application
+import com.rozakos.home.data.ble.AndroidBleProvisioningService
+import com.rozakos.home.data.ble.BleProvisioningService
 import com.rozakos.home.data.device.HttpDeviceStatusChecker
 import com.rozakos.home.data.device.LocalDeviceRepository
 import com.rozakos.home.data.device.PlaceholderDeviceDiscoveryService
@@ -26,6 +28,9 @@ class AppContainer(application: Application) {
     val statusChecker: DeviceStatusChecker = HttpDeviceStatusChecker()
 
     val discoveryService = PlaceholderDeviceDiscoveryService()
+
+    val bleProvisioningService: BleProvisioningService =
+        AndroidBleProvisioningService(application.applicationContext)
 
     val addDeviceUseCase = AddDeviceUseCase(deviceRepository)
 }

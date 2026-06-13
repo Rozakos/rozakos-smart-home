@@ -17,6 +17,8 @@ import com.rozakos.home.ui.device.DeviceDetailScreen
 import com.rozakos.home.ui.device.DeviceDetailViewModel
 import com.rozakos.home.ui.home.HomeScreen
 import com.rozakos.home.ui.home.HomeViewModel
+import com.rozakos.home.ui.onboarding.BleOnboardingScreen
+import com.rozakos.home.ui.onboarding.BleOnboardingViewModel
 import com.rozakos.home.ui.theme.RozakosHomeTheme
 import com.rozakos.home.ui.webview.WebUiScreen
 import java.net.URLDecoder
@@ -59,8 +61,20 @@ private fun RozakosHomeNav(container: AppContainer) {
                 onDeviceAdded = {
                     navController.popBackStack(Routes.Home, inclusive = false)
                 },
+                onStartBleOnboarding = { navController.navigate(Routes.BleOnboarding) },
                 onOpenSetupPortal = {
                     navController.navigate(Routes.web("Setup Portal", "http://192.168.4.1"))
+                },
+            )
+        }
+
+        composable(Routes.BleOnboarding) {
+            val viewModel: BleOnboardingViewModel = viewModel(factory = factory)
+            BleOnboardingScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onDeviceAdded = {
+                    navController.popBackStack(Routes.Home, inclusive = false)
                 },
             )
         }
@@ -97,6 +111,7 @@ private fun RozakosHomeNav(container: AppContainer) {
 private object Routes {
     const val Home = "home"
     const val AddDevice = "add-device"
+    const val BleOnboarding = "ble-onboarding"
     const val Device = "device/{deviceId}"
     const val Web = "web?title={title}&url={url}"
 
