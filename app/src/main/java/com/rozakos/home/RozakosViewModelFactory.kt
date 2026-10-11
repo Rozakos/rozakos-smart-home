@@ -14,16 +14,29 @@ class RozakosViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(HomeViewModel::class.java) ->
-                HomeViewModel(container.deviceRepository, container.statusChecker) as T
+                HomeViewModel(
+                    container.deviceRepository,
+                    container.statusChecker,
+                    container.deviceApi,
+                    container.discoveryService,
+                ) as T
 
             modelClass.isAssignableFrom(AddDeviceViewModel::class.java) ->
-                AddDeviceViewModel(container.addDeviceUseCase) as T
+                AddDeviceViewModel(
+                    container.addDeviceUseCase,
+                    container.discoveryService,
+                    container.deviceRepository,
+                ) as T
 
             modelClass.isAssignableFrom(BleOnboardingViewModel::class.java) ->
                 BleOnboardingViewModel(container.bleProvisioningService, container.addDeviceUseCase) as T
 
             modelClass.isAssignableFrom(DeviceDetailViewModel::class.java) ->
-                DeviceDetailViewModel(container.deviceRepository, container.statusChecker) as T
+                DeviceDetailViewModel(
+                    container.deviceRepository,
+                    container.statusChecker,
+                    container.deviceApi,
+                ) as T
 
             else -> error("Unknown ViewModel: ${modelClass.name}")
         }

@@ -2,16 +2,24 @@
 
 Rozakos Home is a local-first Android device hub for Rozakos ESP32 / IoT projects. The first supported device type is the ESP32-2432S028R CYD Stock Ticker, with the existing firmware WebUI embedded as the working v1 control surface.
 
-## What Works In V1
+## What It Does
 
-- Dashboard for saved devices.
-- Add-device flow for Stock Tickers.
-- Manual IP entry for CYD Stock Ticker devices.
-- Local persistence with DataStore.
-- Device detail page with status check, room/group, IP, and last-seen state.
-- Embedded WebView fallback for `http://<device-ip>/settings`.
-- Setup-mode helper for `CYD-Setup-XXXX` and `http://192.168.4.1`.
-- Extensible device category/type registry for future Rozakos devices.
+- **Finds your devices by itself**: Add device lists every Rozakos device on the
+  phone's WiFi (mDNS `_rozakos._tcp` + a subnet probe of `/api/device-info`).
+  One tap adds it. A saved device that moved to a new IP is found again
+  automatically.
+- **Live dashboard**: device cards grouped by room show online/offline and live
+  values (quotes on the tickers, follower counts on the tracker), refreshed every
+  30 s.
+- **Native controls**: on the CYD Stock Ticker you edit the watchlist (add,
+  remove, reorder) and refresh interval in the app; the device's own web page is
+  still one tap away for everything else.
+- **Bluetooth setup**: a factory-fresh CYD Stock Ticker gets your WiFi details
+  over BLE, no network switching needed.
+- **Supported devices**: CYD Stock Ticker, STM32 (NUCLEO) Stock Ticker, CYD
+  Follower Tracker. The protocol is in
+  [docs/rozakos-local-protocol.md](docs/rozakos-local-protocol.md); a new
+  device type needs a registry entry and that contract, nothing else.
 
 ## Build And Run
 
@@ -20,11 +28,16 @@ Rozakos Home is a local-first Android device hub for Rozakos ESP32 / IoT project
 3. Select an emulator or physical Android device.
 4. Run the `app` configuration.
 
-Command-line build:
+Command-line build and tests:
 
 ```powershell
 .\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:testDebugUnitTest
 ```
+
+The unit tests cover the protocol parsing (with the exact JSON the firmware
+serves), discovery merging, subnet enumeration and the HTTP client against a
+local fake device.
 
 If Java is not on your shell `PATH`, Android Studio can still build the project. On this machine, the project was verified with Android Studio's bundled JDK.
 
@@ -60,43 +73,27 @@ If the ticker is not on the home network:
 ```text
 app/src/main/java/com/rozakos/home/
   data/
-    device/        HTTP status checks, discovery scaffold, CYD API TODO interface
+    ble/           BLE WiFi provisioning (central side)
+    device/        LAN discovery (mDNS + subnet probe), status checks, repository
     local/         DataStore persistence
+    protocol/      Rozakos local device protocol: models, parsers, HTTP client
   domain/
-    model/         Device, category, type, status models
+    model/         Device, category, type registry, status models
     repository/    Repository interfaces
     usecase/       Add device use case
   ui/
-    adddevice/     Add-device flow
-    device/        Device detail screen
-    home/          Dashboard
+    adddevice/     Nearby devices + manual add
+    components/    Live state rows (quotes, followers)
+    device/        Device detail, live data, watchlist editor
+    home/          Dashboard grouped by room
+    onboarding/    Bluetooth setup flow
     theme/         Material 3 theme
-    webview/       Embedded WebUI screen
+    webview/       Embedded device web page
 ```
 
-## Future Integration TODOs
+## Next Ideas
 
-- Add subnet scanning.
-- Add mDNS discovery.
-- Add firmware endpoint support:
-
-```http
-GET /api/device-info
-```
-
-Suggested response:
-
-```json
-{
-  "id": "cyd-stock-abc123",
-  "name": "Office Ticker",
-  "type": "cyd_stock_ticker",
-  "firmwareVersion": "1.0.0",
-  "capabilities": ["web_ui", "settings"],
-  "webUiPath": "/settings"
-}
-```
-
-- Add native CYD settings endpoints for symbols, refresh interval, and API bearer token.
-- Add more categories such as Sensors, Lighting, Household Security, Weather Stations, and Cleaning Appliances.
-- Add optional cloud sync/account support later while keeping local-first behavior.
+- Native settings for the Follower Tracker (accounts) and the STM32 ticker
+  (needs a JSON settings endpoint in their firmware first).
+- mDNS on the STM32 ticker (LwIP's mdns app) so it shows up without the subnet probe.
+- Home-screen widget with the live quotes.

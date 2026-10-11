@@ -12,8 +12,8 @@ android {
         applicationId = "com.rozakos.home"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildTypes {
@@ -57,4 +57,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
 
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    // android.jar only has stubs for org.json; the real one runs the parsers on the JVM.
+    testImplementation(libs.org.json)
 }

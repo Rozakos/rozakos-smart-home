@@ -38,4 +38,30 @@ class LocalDeviceRepository(
             },
         )
     }
+
+    override suspend fun updateIdentity(deviceId: String, ipAddress: String, uid: String?, firmware: String?) {
+        val current = dataStore.devices.first()
+        dataStore.saveDevices(
+            current.map { device ->
+                if (device.id == deviceId) {
+                    device.copy(
+                        ipAddress = ipAddress,
+                        uid = uid ?: device.uid,
+                        firmware = firmware ?: device.firmware,
+                    )
+                } else {
+                    device
+                }
+            },
+        )
+    }
+
+    override suspend fun updateRoom(deviceId: String, room: String?) {
+        val current = dataStore.devices.first()
+        dataStore.saveDevices(
+            current.map { device ->
+                if (device.id == deviceId) device.copy(room = room?.trim()?.takeIf { it.isNotBlank() }) else device
+            },
+        )
+    }
 }

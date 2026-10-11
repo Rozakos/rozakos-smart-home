@@ -32,6 +32,19 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import com.rozakos.home.data.device.DiscoveredDevice
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rozakos.home.domain.model.DeviceCategory
@@ -48,6 +61,7 @@ fun AddDeviceScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val selectedType = DeviceTypeRegistry.byId(uiState.selectedType)
+    var pendingAdd by remember { mutableStateOf<DiscoveredDevice?>(null) }
 
     LaunchedEffect(uiState.saved) {
         if (uiState.saved) onDeviceAdded()
@@ -73,6 +87,16 @@ fun AddDeviceScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
+                NearbyDevicesSection(
+                    scanning = uiState.scanning,
+                    scannedOnce = uiState.scannedOnce,
+                    devices = uiState.nearby,
+                    onRescan = viewModel::scan,
+                    onAdd = { pendingAdd = it },
+                )
+            }
+
+            item {
                 SectionTitle("Category")
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(DeviceCategory.entries.size) { index ->
@@ -81,7 +105,7 @@ fun AddDeviceScreen(
                             selected = uiState.selectedCategory == category,
                             onClick = { viewModel.selectCategory(category) },
                             label = { Text(category.displayName) },
-                            enabled = category == DeviceCategory.StockTickers,
+                            enabled = DeviceTypeRegistry.byCategory(category).isNotEmpty(),
                         )
                     }
                 }
@@ -89,34 +113,43 @@ fun AddDeviceScreen(
 
             item {
                 SectionTitle("Device type")
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Icon(
-                            imageVector = selectedType.icon,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                        Column {
-                            Text(selectedType.displayName, fontWeight = FontWeight.SemiBold)
-                            Text(
-                                "First supported Rozakos Stock Ticker device.",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodyMedium,
-                            )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DeviceTypeRegistry.byCategory(uiState.selectedCategory).forEach { type ->
+                        val selected = type.id == uiState.selectedType
+                        Card(
+                            onClick = { viewModel.selectType(type.id) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
+                                else MaterialTheme.colorScheme.surface,
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Icon(
+                                    imageVector = type.icon,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
+                                Column {
+                                    Text(type.displayName, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        type.description,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            item {
+            if (selectedType.bleProvisioning) item {
                 SectionTitle("Quick setup")
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -189,7 +222,7 @@ fun AddDeviceScreen(
                 }
             }
 
-            item {
+            if (selectedType.setupUrl != null) item {
                 SectionTitle("Setup mode")
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
@@ -214,16 +247,123 @@ fun AddDeviceScreen(
                 }
             }
 
-            item {
-                SectionTitle("Discovery")
-                Text(
-                    text = "LAN discovery is scaffolded for a future firmware /api/device-info endpoint, subnet scanning, and mDNS.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+        }
+    }
+
+    pendingAdd?.let { device ->
+        AddDiscoveredDialog(
+            device = device,
+            onDismiss = { pendingAdd = null },
+            onConfirm = { name, room ->
+                pendingAdd = null
+                viewModel.addDiscovered(device, name, room)
+            },
+        )
+    }
+}
+
+@Composable
+private fun NearbyDevicesSection(
+    scanning: Boolean,
+    scannedOnce: Boolean,
+    devices: List<DiscoveredDevice>,
+    onRescan: () -> Unit,
+    onAdd: (DiscoveredDevice) -> Unit,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Nearby devices",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        if (scanning) {
+            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+        } else {
+            TextButton(onClick = onRescan) {
+                Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                Text("Scan again", modifier = Modifier.padding(start = 6.dp))
             }
         }
     }
+    Spacer(Modifier.height(8.dp))
+    if (devices.isEmpty()) {
+        Text(
+            text = when {
+                scanning -> "Looking for Rozakos devices on your WiFi…"
+                scannedOnce -> "No new devices found. Make sure the device is powered on and on the same WiFi as this phone, or set it up below."
+                else -> ""
+            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        return
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        devices.forEach { device ->
+            val type = DeviceTypeRegistry.byId(device.type)
+            Card(
+                onClick = { onAdd(device) },
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(type.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(device.name, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            listOfNotNull(type.displayName, device.ipAddress, device.firmware?.let { "fw $it" })
+                                .joinToString(" · "),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    FilledTonalButton(onClick = { onAdd(device) }) { Text("Add") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddDiscoveredDialog(
+    device: DiscoveredDevice,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, room: String) -> Unit,
+) {
+    var name by remember(device) { mutableStateOf(device.name) }
+    var room by remember(device) { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add ${DeviceTypeRegistry.byId(device.type).displayName}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Found at ${device.ipAddress}.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name") }, singleLine = true)
+                OutlinedTextField(
+                    value = room,
+                    onValueChange = { room = it },
+                    label = { Text("Room (optional)") },
+                    placeholder = { Text("Office") },
+                    singleLine = true,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name, room) }, enabled = name.isNotBlank()) { Text("Add device") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable

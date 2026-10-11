@@ -23,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -52,7 +53,9 @@ import androidx.compose.ui.unit.dp
 import com.rozakos.home.domain.model.ConnectionStatus
 import com.rozakos.home.domain.model.Device
 import com.rozakos.home.domain.model.DeviceTypeRegistry
+import com.rozakos.home.ui.components.summary
 import com.rozakos.home.ui.util.formatLastSeen
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +68,10 @@ fun HomeScreen(
     var renameTarget by remember { mutableStateOf<Device?>(null) }
 
     LaunchedEffect(Unit) {
-        viewModel.refreshStatuses()
+        while (true) {   // live values on the cards; cancelled when the screen leaves
+            viewModel.refreshStatuses()
+            delay(30_000)
+        }
     }
 
     Scaffold(
@@ -75,13 +81,21 @@ fun HomeScreen(
                     Column {
                         Text("Rozakos Home", fontWeight = FontWeight.SemiBold)
                         Text(
-                            text = "${uiState.devices.size} devices",
+                            text = when {
+                                uiState.devices.isEmpty() -> "No devices yet"
+                                uiState.offline > 0 -> "${uiState.online} online · ${uiState.offline} offline"
+                                uiState.online > 0 -> "All ${uiState.online} devices online"
+                                else -> "${uiState.devices.size} devices"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 },
                 actions = {
+                    if (uiState.refreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp).padding(end = 4.dp), strokeWidth = 2.dp)
+                    }
                     IconButton(onClick = viewModel::refreshStatuses) {
                         Icon(Icons.Outlined.Refresh, contentDescription = "Refresh status")
                     }
@@ -109,13 +123,27 @@ fun HomeScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(uiState.devices, key = { it.device.id }) { card ->
-                    DeviceCard(
-                        card = card,
-                        onOpen = { onOpenDevice(card.device.id) },
-                        onRename = { renameTarget = card.device },
-                        onRemove = { viewModel.remove(card.device.id) },
-                    )
+                val showRooms = uiState.sections.any { it.room != null }
+                uiState.sections.forEach { section ->
+                    if (showRooms) {
+                        item(key = "room:${section.room}") {
+                            Text(
+                                text = section.room ?: "Other devices",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp),
+                            )
+                        }
+                    }
+                    items(section.devices, key = { it.device.id }) { card ->
+                        DeviceCard(
+                            card = card,
+                            onOpen = { onOpenDevice(card.device.id) },
+                            onRename = { renameTarget = card.device },
+                            onRemove = { viewModel.remove(card.device.id) },
+                        )
+                    }
                 }
             }
         }
@@ -205,12 +233,22 @@ private fun DeviceCard(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "${deviceType.category.displayName} · ${card.device.ipAddress}",
+                    text = "${deviceType.displayName} · ${card.device.ipAddress}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                card.state?.takeIf { card.status == ConnectionStatus.Online }?.let { live ->
+                    Text(
+                        text = live.summary(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     AssistChip(

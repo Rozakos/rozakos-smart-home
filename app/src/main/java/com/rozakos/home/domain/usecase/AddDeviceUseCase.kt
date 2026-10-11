@@ -15,6 +15,8 @@ class AddDeviceUseCase(
         type: DeviceTypeId,
         ipAddress: String,
         room: String?,
+        uid: String? = null,
+        firmware: String? = null,
     ) {
         repository.addDevice(
             Device(
@@ -24,6 +26,8 @@ class AddDeviceUseCase(
                 type = type,
                 ipAddress = ipAddress.trim(),
                 room = room?.trim()?.takeIf { it.isNotBlank() },
+                uid = uid,
+                firmware = firmware,
             ),
         )
     }

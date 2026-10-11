@@ -42,7 +42,9 @@ class DeviceDataStore(
                     .put("type", device.type.id)
                     .put("ipAddress", device.ipAddress)
                     .put("room", device.room)
-                    .put("lastSeenEpochMillis", device.lastSeenEpochMillis ?: JSONObject.NULL),
+                    .put("lastSeenEpochMillis", device.lastSeenEpochMillis ?: JSONObject.NULL)
+                    .put("uid", device.uid ?: JSONObject.NULL)
+                    .put("firmware", device.firmware ?: JSONObject.NULL),
             )
         }
         return array.toString()
@@ -66,6 +68,8 @@ class DeviceDataStore(
                             room = json.optString("room").takeIf { it.isNotBlank() && it != "null" },
                             lastSeenEpochMillis = json.optLong("lastSeenEpochMillis")
                                 .takeIf { !json.isNull("lastSeenEpochMillis") },
+                            uid = json.optString("uid").takeIf { it.isNotBlank() && it != "null" },
+                            firmware = json.optString("firmware").takeIf { it.isNotBlank() && it != "null" },
                         ),
                     )
                 }
