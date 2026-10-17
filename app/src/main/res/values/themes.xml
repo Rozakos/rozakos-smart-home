@@ -1,7 +1,8 @@
 <resources>
-    <style name="Theme.RozakosHome" parent="android:style/Theme.Material.Light.NoActionBar">
+    <style name="Theme.RozakosHome.Base" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowLightStatusBar">true</item>
-        <item name="android:statusBarColor">#F8FAFC</item>
-        <item name="android:navigationBarColor">#F8FAFC</item>
+        <item name="android:statusBarColor">@color/rozakos_background</item>
+        <item name="android:navigationBarColor">@color/rozakos_navy</item>
     </style>
+    <style name="Theme.RozakosHome" parent="Theme.RozakosHome.Base" />
 </resources>

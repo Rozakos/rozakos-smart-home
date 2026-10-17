@@ -36,6 +36,7 @@ class RozakosViewModelFactory(
                     container.deviceRepository,
                     container.statusChecker,
                     container.deviceApi,
+                    container.symbolCatalog,
                 ) as T
 
             else -> error("Unknown ViewModel: ${modelClass.name}")

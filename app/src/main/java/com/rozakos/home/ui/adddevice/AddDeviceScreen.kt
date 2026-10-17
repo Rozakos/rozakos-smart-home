@@ -42,6 +42,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import com.rozakos.home.data.device.DiscoveredDevice
@@ -49,6 +50,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rozakos.home.domain.model.DeviceCategory
 import com.rozakos.home.domain.model.DeviceTypeRegistry
+import com.rozakos.home.ui.components.DeviceArtwork
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import android.content.Intent
+import android.provider.Settings
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,6 +75,8 @@ fun AddDeviceScreen(
     val uiState by viewModel.uiState.collectAsState()
     val selectedType = DeviceTypeRegistry.byId(uiState.selectedType)
     var pendingAdd by remember { mutableStateOf<DiscoveredDevice?>(null) }
+    var mode by rememberSaveable { mutableStateOf(0) }
+    val context = LocalContext.current
 
     LaunchedEffect(uiState.saved) {
         if (uiState.saved) onDeviceAdded()
@@ -87,36 +102,56 @@ fun AddDeviceScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
+                TabRow(selectedTabIndex = mode) {
+                    listOf("Nearby", "Manual", "New device").forEachIndexed { index, title ->
+                        Tab(selected = mode == index, onClick = { mode = index }, text = { Text(title) })
+                    }
+                }
+                if (uiState.saving) LinearProgressIndicator(Modifier.fillMaxWidth())
+                uiState.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 12.dp)) }
+            }
+            if (mode == 0) item {
+                Text("Find devices on your network", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("Connect your phone and device to the same Wi-Fi. Devices already in your home are hidden.",
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp, bottom = 16.dp))
                 NearbyDevicesSection(
                     scanning = uiState.scanning,
                     scannedOnce = uiState.scannedOnce,
                     devices = uiState.nearby,
                     onRescan = viewModel::scan,
+                    onStop = viewModel::stopScan,
+                    error = uiState.scanError,
+                    alreadyAddedCount = uiState.alreadyAddedCount,
                     onAdd = { pendingAdd = it },
                 )
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(onClick = { mode = 2 }, modifier = Modifier.fillMaxWidth()) { Text("Set up a new device") }
+                TextButton(onClick = { mode = 1 }, modifier = Modifier.fillMaxWidth()) { Text("Add by IP address") }
             }
 
-            item {
+            if (mode != 0) item {
                 SectionTitle("Category")
+                val categories = DeviceCategory.entries.filter { DeviceTypeRegistry.byCategory(it).isNotEmpty() }
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(DeviceCategory.entries.size) { index ->
-                        val category = DeviceCategory.entries[index]
+                    items(categories.size) { index ->
+                        val category = categories[index]
                         FilterChip(
                             selected = uiState.selectedCategory == category,
                             onClick = { viewModel.selectCategory(category) },
                             label = { Text(category.displayName) },
-                            enabled = DeviceTypeRegistry.byCategory(category).isNotEmpty(),
                         )
                     }
                 }
             }
 
-            item {
+            if (mode != 0) item {
                 SectionTitle("Device type")
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     DeviceTypeRegistry.byCategory(uiState.selectedCategory).forEach { type ->
                         val selected = type.id == uiState.selectedType
                         Card(
+                            modifier = Modifier.semantics { this.selected = selected },
                             onClick = { viewModel.selectType(type.id) },
                             colors = CardDefaults.cardColors(
                                 containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer
@@ -130,12 +165,8 @@ fun AddDeviceScreen(
                                     .padding(16.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
-                                Icon(
-                                    imageVector = type.icon,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                )
-                                Column {
+                                DeviceArtwork(type.id, Modifier.size(54.dp))
+                                Column(Modifier.weight(1f)) {
                                     Text(type.displayName, fontWeight = FontWeight.SemiBold)
                                     Text(
                                         type.description,
@@ -143,13 +174,15 @@ fun AddDeviceScreen(
                                         style = MaterialTheme.typography.bodyMedium,
                                     )
                                 }
+                                if (selected) Icon(Icons.Outlined.CheckCircle, contentDescription = "Selected device type",
+                                    tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
                 }
             }
 
-            if (selectedType.bleProvisioning) item {
+            if (mode == 2 && selectedType.bleProvisioning) item {
                 SectionTitle("Quick setup")
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
@@ -180,7 +213,7 @@ fun AddDeviceScreen(
                 }
             }
 
-            item {
+            if (mode == 1) item {
                 SectionTitle("Manual connection")
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedTextField(
@@ -188,6 +221,8 @@ fun AddDeviceScreen(
                         onValueChange = viewModel::updateName,
                         label = { Text("Device name") },
                         singleLine = true,
+                        isError = uiState.nameError != null,
+                        supportingText = { uiState.nameError?.let { Text(it) } },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
@@ -196,6 +231,9 @@ fun AddDeviceScreen(
                         label = { Text("IP address") },
                         placeholder = { Text("192.168.1.50") },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrectEnabled = false),
+                        isError = uiState.ipError != null,
+                        supportingText = { Text(uiState.ipError ?: "The address shown on your device or in your router.") },
                         modifier = Modifier.fillMaxWidth(),
                     )
                     OutlinedTextField(
@@ -206,24 +244,18 @@ fun AddDeviceScreen(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    uiState.error?.let {
-                        Text(
-                            text = it,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                    }
                     Button(
                         onClick = viewModel::save,
+                        enabled = !uiState.saving,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text("Save device")
+                        Text(if (uiState.saving) "Adding…" else "Add to home")
                     }
                 }
             }
 
-            if (selectedType.setupUrl != null) item {
-                SectionTitle("Setup mode")
+            if (mode == 2) item {
+                SectionTitle(if (selectedType.setupUrl != null) "Wi-Fi setup" else "Connect the device")
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                     shape = MaterialTheme.shapes.medium,
@@ -235,14 +267,16 @@ fun AddDeviceScreen(
                         selectedType.setupInstructions.forEachIndexed { index, text ->
                             Text("${index + 1}. $text")
                         }
-                        AssistChip(
-                            onClick = {},
-                            label = { Text("Setup AP: ${selectedType.setupNetworkPrefix}XXXX") },
-                        )
-                        OutlinedButton(onClick = onOpenSetupPortal) {
+                        if (selectedType.setupNetworkPrefix != null) Text("Setup network: ${selectedType.setupNetworkPrefix}XXXX",
+                            style = MaterialTheme.typography.labelLarge)
+                        if (selectedType.setupUrl != null) OutlinedButton(onClick = {
+                            context.startActivity(Intent(Settings.ACTION_WIFI_SETTINGS))
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Open Wi-Fi settings") }
+                        if (selectedType.setupUrl != null) OutlinedButton(onClick = onOpenSetupPortal, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Outlined.OpenInBrowser, contentDescription = null)
                             Text("Open setup portal", modifier = Modifier.padding(start = 8.dp))
                         }
+                        TextButton(onClick = { mode = 0; viewModel.scan() }, modifier = Modifier.fillMaxWidth()) { Text("Find it on my network") }
                     }
                 }
             }
@@ -268,6 +302,9 @@ private fun NearbyDevicesSection(
     scannedOnce: Boolean,
     devices: List<DiscoveredDevice>,
     onRescan: () -> Unit,
+    onStop: () -> Unit,
+    error: String?,
+    alreadyAddedCount: Int,
     onAdd: (DiscoveredDevice) -> Unit,
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -279,6 +316,7 @@ private fun NearbyDevicesSection(
         )
         if (scanning) {
             CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            TextButton(onClick = onStop) { Text("Stop") }
         } else {
             TextButton(onClick = onRescan) {
                 Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -290,7 +328,9 @@ private fun NearbyDevicesSection(
     if (devices.isEmpty()) {
         Text(
             text = when {
+                error != null -> error
                 scanning -> "Looking for Rozakos devices on your WiFi…"
+                alreadyAddedCount > 0 -> "All $alreadyAddedCount discovered devices are already in your home."
                 scannedOnce -> "No new devices found. Make sure the device is powered on and on the same WiFi as this phone, or set it up below."
                 else -> ""
             },
@@ -314,7 +354,7 @@ private fun NearbyDevicesSection(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(type.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    DeviceArtwork(type.id, Modifier.size(48.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(device.name, fontWeight = FontWeight.SemiBold)
                         Text(

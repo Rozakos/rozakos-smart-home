@@ -2,6 +2,10 @@ package com.rozakos.home.ui.onboarding
 
 import android.Manifest
 import android.os.Build
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -37,6 +41,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +70,26 @@ fun BleOnboardingScreen(
     onDeviceAdded: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var stopDialog by remember { mutableStateOf(false) }
+    val requestBack: () -> Unit = {
+        if (uiState.step == OnboardingStep.Provisioning) stopDialog = true else onBack()
+    }
+    BackHandler(enabled = uiState.step == OnboardingStep.Provisioning, onBack = requestBack)
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshBluetoothReady()
+                if (blePermissions().all { context.checkSelfPermission(it) == android.content.pm.PackageManager.PERMISSION_GRANTED }) {
+                    viewModel.permissionsGranted()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        viewModel.refreshBluetoothReady()
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(uiState.saved) {
         if (uiState.saved) onDeviceAdded()
@@ -60,7 +98,7 @@ fun BleOnboardingScreen(
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { result ->
-        if (result.values.all { it }) viewModel.startScan()
+        if (result.isNotEmpty() && result.values.all { it }) viewModel.startScan() else viewModel.permissionDenied()
     }
 
     Scaffold(
@@ -68,7 +106,7 @@ fun BleOnboardingScreen(
             TopAppBar(
                 title = { Text("Bluetooth setup") },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = requestBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -86,14 +124,14 @@ fun BleOnboardingScreen(
                 OnboardingStep.Scan -> scanStep(
                     uiState = uiState,
                     onScan = {
-                        if (!viewModel.isBluetoothReady()) {
-                            return@scanStep
-                        }
                         permissionLauncher.launch(blePermissions())
                     },
                     onStop = viewModel::stopScan,
                     onSelect = viewModel::select,
-                    bluetoothReady = viewModel.isBluetoothReady(),
+                    bluetoothReady = uiState.bluetoothReady,
+                    onBluetoothSettings = { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) },
+                    onAppSettings = { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:${context.packageName}"))) },
                 )
 
                 OnboardingStep.Credentials -> credentialsStep(
@@ -115,6 +153,13 @@ fun BleOnboardingScreen(
             }
         }
     }
+    if (stopDialog) AlertDialog(
+        onDismissRequest = { stopDialog = false },
+        title = { Text("Stop device setup?") },
+        text = { Text("The device may still join Wi-Fi if it has already received the network details.") },
+        confirmButton = { TextButton(onClick = { viewModel.stopProvisioning(); stopDialog = false; onBack() }) { Text("Stop setup") } },
+        dismissButton = { TextButton(onClick = { stopDialog = false }) { Text("Keep connecting") } },
+    )
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.scanStep(
@@ -123,6 +168,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.scanStep(
     onStop: () -> Unit,
     onSelect: (ProvisioningCandidate) -> Unit,
     bluetoothReady: Boolean,
+    onBluetoothSettings: () -> Unit,
+    onAppSettings: () -> Unit,
 ) {
     item {
         Text(
@@ -135,11 +182,13 @@ private fun androidx.compose.foundation.lazy.LazyListScope.scanStep(
     if (!bluetoothReady) {
         item {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                Column(Modifier.padding(16.dp)) {
                 Text(
                     "Turn on Bluetooth to scan for devices.",
-                    modifier = Modifier.padding(16.dp),
                     color = MaterialTheme.colorScheme.onErrorContainer,
                 )
+                TextButton(onClick = onBluetoothSettings) { Text("Open Bluetooth settings") }
+                }
             }
         }
     }
@@ -162,6 +211,11 @@ private fun androidx.compose.foundation.lazy.LazyListScope.scanStep(
         item {
             Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
         }
+    }
+    if (uiState.permissionDenied) item { OutlinedButton(onClick = onAppSettings) { Text("Open app settings") } }
+    if (!uiState.scanning && uiState.scannedOnce && uiState.candidates.isEmpty() && uiState.error == null) item {
+        Text("No setup-ready devices found. Keep the device nearby and restart it if its setup window has ended.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 
     items(uiState.candidates, key = { it.address }) { candidate ->
@@ -228,17 +282,24 @@ private fun androidx.compose.foundation.lazy.LazyListScope.credentialsStep(
             value = uiState.ssid,
             onValueChange = onSsid,
             label = { Text("WiFi network (SSID)") },
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
     }
     item {
+        var visible by remember { mutableStateOf(false) }
         OutlinedTextField(
             value = uiState.password,
             onValueChange = onPassword,
             label = { Text("WiFi password") },
             singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
+            visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+            trailingIcon = { IconButton(onClick = { visible = !visible }) {
+                Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                    contentDescription = if (visible) "Hide Wi-Fi password" else "Show Wi-Fi password")
+            } },
             modifier = Modifier.fillMaxWidth(),
         )
     }
@@ -324,8 +385,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.doneStep(
         }
     }
     item {
-        Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
-            Text("Add to home")
+        Button(onClick = onSave, enabled = !uiState.saving, modifier = Modifier.fillMaxWidth()) {
+            Text(if (uiState.saving) "Adding…" else "Add to home")
         }
     }
 }

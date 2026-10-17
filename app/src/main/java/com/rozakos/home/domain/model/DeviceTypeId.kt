@@ -4,7 +4,9 @@ package com.rozakos.home.domain.model
 enum class DeviceTypeId(val id: String) {
     CydStockTicker("cyd_stock_ticker"),
     CydFollowerTracker("cyd_follower_tracker"),
-    NucleoStockTicker("nucleo_stock_ticker");
+    NucleoStockTicker("nucleo_stock_ticker"),
+    DotMatrixStockTicker("dot_matrix_stock_ticker"),
+    OledStockTicker("oled_stock_ticker");
 
     companion object {
         fun fromId(id: String): DeviceTypeId =

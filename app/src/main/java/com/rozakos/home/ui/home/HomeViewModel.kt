@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 data class DeviceCardState(
     val device: Device,
@@ -32,6 +33,8 @@ data class RoomSection(val room: String?, val devices: List<DeviceCardState>)
 data class HomeUiState(
     val devices: List<DeviceCardState> = emptyList(),
     val refreshing: Boolean = false,
+    val loading: Boolean = true,
+    val message: String? = null,
 ) {
     val online: Int get() = devices.count { it.status == ConnectionStatus.Online }
     val offline: Int get() = devices.count { it.status == ConnectionStatus.Offline }
@@ -51,9 +54,10 @@ class HomeViewModel(
     private val statuses = MutableStateFlow<Map<String, ConnectionStatus>>(emptyMap())
     private val states = MutableStateFlow<Map<String, DeviceState>>(emptyMap())
     private val refreshing = MutableStateFlow(false)
+    private val message = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<HomeUiState> =
-        combine(repository.devices, statuses, states, refreshing) { devices, st, live, busy ->
+        combine(repository.devices, statuses, states, refreshing, message) { devices, st, live, busy, notice ->
             HomeUiState(
                 devices = devices.map { device ->
                     DeviceCardState(
@@ -63,15 +67,24 @@ class HomeViewModel(
                     )
                 },
                 refreshing = busy,
+                loading = false,
+                message = notice,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     fun refreshStatuses() {
         if (refreshing.value) return
+        refreshing.value = true
         viewModelScope.launch {
-            refreshing.value = true
-            repository.devices.first().map { device -> launch { refreshOne(device) } }.joinAll()
-            refreshing.value = false
+            try {
+                repository.devices.first().map { device -> launch {
+                    try { refreshOne(device)
+                    } catch (cancelled: CancellationException) { throw cancelled
+                    } catch (_: Exception) { message.value = "Couldn't refresh every device. Check your connection and try again." }
+                } }.joinAll()
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) { message.value = "Couldn't load your devices. Try again."
+            } finally { refreshing.value = false }
         }
     }
 
@@ -103,10 +116,18 @@ class HomeViewModel(
 
     fun rename(deviceId: String, name: String) {
         if (name.isBlank()) return
-        viewModelScope.launch { repository.renameDevice(deviceId, name) }
+        change("Couldn't rename the device. Try again.") { repository.renameDevice(deviceId, name) }
     }
 
     fun remove(deviceId: String) {
-        viewModelScope.launch { repository.removeDevice(deviceId) }
+        change("Couldn't remove the device. Try again.") { repository.removeDevice(deviceId) }
+    }
+    fun clearMessage() { message.value = null }
+    private fun change(failure: String, action: suspend () -> Unit) {
+        viewModelScope.launch {
+            try { action()
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (_: Exception) { message.value = failure }
+        }
     }
 }

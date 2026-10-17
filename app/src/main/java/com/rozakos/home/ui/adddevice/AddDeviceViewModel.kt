@@ -12,6 +12,7 @@ import com.rozakos.home.domain.usecase.AddDeviceUseCase
 import com.rozakos.home.ui.util.isLikelyIpv4
 import com.rozakos.home.ui.util.normalizeIp
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
@@ -32,6 +33,11 @@ data class AddDeviceUiState(
     /** Devices on the LAN that are not in the app yet. */
     val nearby: List<DiscoveredDevice> = emptyList(),
     val scannedOnce: Boolean = false,
+    val scanError: String? = null,
+    val alreadyAddedCount: Int = 0,
+    val saving: Boolean = false,
+    val nameError: String? = null,
+    val ipError: String? = null,
 )
 
 class AddDeviceViewModel(
@@ -49,24 +55,26 @@ class AddDeviceViewModel(
 
     fun scan() {
         if (scanJob?.isActive == true) return
-        _uiState.update { it.copy(scanning = true, nearby = emptyList()) }
+        _uiState.update { it.copy(scanning = true, nearby = emptyList(), scanError = null, alreadyAddedCount = 0) }
         scanJob = viewModelScope.launch {
             val known = repository.devices.first()
             discovery.discover()
-                .catch { /* no WiFi / NSD unavailable: the manual path still works */ }
+                .catch { _uiState.update { it.copy(scanError = "Couldn't scan this network. Check Wi-Fi, then try again or use Manual.") } }
                 .onCompletion { _uiState.update { it.copy(scanning = false, scannedOnce = true) } }
                 .collect { found ->
                     val fresh = found.filterNot { d ->
                         known.any { k -> (d.uid != null && k.uid == d.uid) || k.ipAddress == d.ipAddress }
                     }
-                    _uiState.update { it.copy(nearby = fresh) }
+                    _uiState.update { it.copy(nearby = fresh, alreadyAddedCount = found.size - fresh.size) }
                 }
         }
     }
 
+    fun stopScan() { scanJob?.cancel(); scanJob = null }
+
     fun addDiscovered(device: DiscoveredDevice, name: String, room: String) {
         val type = DeviceTypeRegistry.byId(device.type)
-        viewModelScope.launch {
+        persist {
             addDevice(
                 name = name.ifBlank { device.name },
                 category = type.category,
@@ -76,7 +84,6 @@ class AddDeviceViewModel(
                 uid = device.uid,
                 firmware = device.firmware,
             )
-            _uiState.update { it.copy(saved = true) }
         }
     }
 
@@ -104,11 +111,11 @@ class AddDeviceViewModel(
     }
 
     fun updateName(value: String) {
-        _uiState.update { it.copy(name = value, error = null) }
+        _uiState.update { it.copy(name = value, error = null, nameError = null) }
     }
 
     fun updateIpAddress(value: String) {
-        _uiState.update { it.copy(ipAddress = value, error = null) }
+        _uiState.update { it.copy(ipAddress = value, error = null, ipError = null) }
     }
 
     fun updateRoom(value: String) {
@@ -118,19 +125,11 @@ class AddDeviceViewModel(
     fun save() {
         val state = _uiState.value
         val ip = normalizeIp(state.ipAddress)
-        when {
-            state.name.isBlank() -> {
-                _uiState.update { it.copy(error = "Enter a device name.") }
-                return
-            }
-
-            !isLikelyIpv4(ip) -> {
-                _uiState.update { it.copy(error = "Enter a valid local IPv4 address, for example 192.168.1.50.") }
-                return
-            }
-        }
-
-        viewModelScope.launch {
+        val nameError = if (state.name.isBlank()) "Enter a device name." else null
+        val ipError = if (!isLikelyIpv4(ip)) "Use an IPv4 address such as 192.168.1.50." else null
+        _uiState.update { it.copy(nameError = nameError, ipError = ipError, error = null) }
+        if (nameError != null || ipError != null) return
+        persist {
             addDevice(
                 name = state.name,
                 category = state.selectedCategory,
@@ -138,7 +137,20 @@ class AddDeviceViewModel(
                 ipAddress = ip,
                 room = state.room,
             )
-            _uiState.update { it.copy(saved = true) }
+        }
+    }
+
+    private fun persist(action: suspend () -> Unit) {
+        if (_uiState.value.saving || _uiState.value.saved) return
+        _uiState.update { it.copy(saving = true, error = null) }
+        viewModelScope.launch {
+            try {
+                action()
+                _uiState.update { it.copy(saved = true) }
+            } catch (cancelled: CancellationException) { throw cancelled
+            } catch (error: Exception) {
+                _uiState.update { it.copy(error = error.message ?: "Couldn't add the device. Try again.") }
+            } finally { _uiState.update { it.copy(saving = false) } }
         }
     }
 }

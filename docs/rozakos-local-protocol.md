@@ -11,6 +11,8 @@ Implemented by:
 | CYD Stock Ticker (`Rozakos/CYD-Stock-Ticker`) | `cyd_stock_ticker` | mDNS + subnet probe | device-info, state, settings (GET/POST) |
 | CYD Follower Tracker (`Rozakos/CYD-Following-Tracker`) | `cyd_follower_tracker` | mDNS + subnet probe | device-info, state |
 | STM32 Stock Ticker (`Rozakos/NUCLEO-STOCK-TICKER`) | `nucleo_stock_ticker` | subnet probe (no mDNS on LwIP build) | device-info, state |
+| OLED Stock Ticker (`Dot-Matrix-Stock-Ticker`, `esp32-oled` target) | `oled_stock_ticker` | mDNS + subnet probe | device-info, state, settings (GET/POST) |
+| Dot-Matrix Stock Ticker (`Rozakos/Dot-Matrix-Stock-Ticker`) | `dot_matrix_stock_ticker` | mDNS + subnet probe | device-info, state, settings (GET/POST) |
 
 BLE WiFi provisioning (unprovisioned CYD Stock Ticker) is a separate contract:
 [ble-provisioning-protocol.md](ble-provisioning-protocol.md).

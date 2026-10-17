@@ -15,6 +15,28 @@ import org.junit.Test
 
 /** Bodies below are exactly what the firmware handlers serialize (see docs/rozakos-local-protocol.md). */
 class DeviceProtocolTest {
+    @Test fun discoversOledTicker() {
+        val info = DeviceProtocol.parseInfo(
+            """{"id":"oled-ticker-d8bc38fd8b28","name":"OLED Stock Ticker","type":"oled_stock_ticker","fw":"1.1.0","webUiPath":"/settings","capabilities":["web_ui","settings","settings_api","state"]}""",
+        )
+        assertEquals(DeviceTypeId.OledStockTicker, DeviceTypeId.fromIdOrNull(info.type))
+        assertTrue(info.has(DeviceInfo.CAP_SETTINGS_API))
+    }
+
+    @Test fun discoversDotMatrixAndUsesNativeWatchlist() {
+        val info = DeviceProtocol.parseInfo(
+            """{"id":"dot-ticker-d8bc38fd8b28","name":"Dot-Matrix Stock Ticker","type":"dot_matrix_stock_ticker","fw":"1.1.0","mac":"D8:BC:38:FD:8B:28","webUiPath":"/settings","capabilities":["web_ui","settings","settings_api","state"]}""",
+        )
+        assertEquals(DeviceTypeId.DotMatrixStockTicker, DeviceTypeId.fromIdOrNull(info.type))
+        assertTrue(info.has(DeviceInfo.CAP_STATE) && info.has(DeviceInfo.CAP_SETTINGS_API))
+        val settings = DeviceProtocol.parseStockSettings(
+            """{"symbols":["AAPL","BTC-USD"],"refresh_s":20,"max_symbols":16,"has_api_key":true,"brightness":6}""",
+        )
+        assertEquals(listOf("AAPL", "BTC-USD"), settings.symbols)
+        assertEquals(20, settings.refreshSeconds)
+        assertFalse(DeviceProtocol.encodeStockSettings(settings).contains("api_key"))
+    }
+
     @Test fun parsesStockTickerDeviceInfo() {
         val info = DeviceProtocol.parseInfo(
             """{"id":"cyd-ticker-ab12","name":"CYD Stock Ticker","type":"cyd_stock_ticker","fw":"1.0.0",

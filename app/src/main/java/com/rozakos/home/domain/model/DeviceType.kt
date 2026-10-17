@@ -1,10 +1,12 @@
 package com.rozakos.home.domain.model
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Groups
+import androidx.compose.material.icons.outlined.GridOn
+import androidx.compose.material.icons.outlined.Memory
+import androidx.compose.material.icons.outlined.SmartDisplay
 import androidx.compose.ui.graphics.vector.ImageVector
 
 data class DeviceType(
@@ -64,7 +66,7 @@ object DeviceTypeRegistry {
         category = DeviceCategory.StockTickers,
         displayName = "STM32 Stock Ticker",
         description = "4.3\" STM32F746 Discovery ticker on Ethernet or WiFi, with price alerts.",
-        icon = Icons.AutoMirrored.Outlined.ShowChart,
+        icon = Icons.Outlined.Memory,
         webUiPath = "/",
         setupNetworkPrefix = null,
         setupUrl = null,
@@ -74,7 +76,37 @@ object DeviceTypeRegistry {
         ),
     )
 
-    val all: List<DeviceType> = listOf(cydStockTicker, nucleoStockTicker, cydFollowerTracker)
+    val dotMatrixStockTicker = DeviceType(
+        id = DeviceTypeId.DotMatrixStockTicker,
+        category = DeviceCategory.StockTickers,
+        displayName = "Dot-Matrix Stock Ticker",
+        description = "Two-row LED ticker with live stock and crypto quotes.",
+        icon = Icons.Outlined.GridOn,
+        webUiPath = "/settings",
+        setupNetworkPrefix = "Ticker-Setup-",
+        setupUrl = "http://192.168.4.1",
+        setupInstructions = listOf(
+            "Power on the Dot-Matrix Stock Ticker.",
+            "Join Ticker-Setup-XXXX from Android WiFi settings.",
+            "Open the setup portal and connect it to your WiFi.",
+            "Return to your normal WiFi; the ticker appears under Nearby devices.",
+        ),
+    )
+
+    val oledStockTicker = dotMatrixStockTicker.copy(
+        id = DeviceTypeId.OledStockTicker,
+        displayName = "OLED Stock Ticker",
+        icon = Icons.Outlined.SmartDisplay,
+        description = "Compact OLED display with live stock and crypto quotes.",
+        setupInstructions = listOf(
+            "Power on the OLED Stock Ticker.",
+            "Join Ticker-Setup-XXXX from Android WiFi settings.",
+            "Open the setup portal and connect it to your WiFi.",
+            "Return to your normal WiFi; the ticker appears under Nearby devices.",
+        ),
+    )
+
+    val all: List<DeviceType> = listOf(cydStockTicker, nucleoStockTicker, dotMatrixStockTicker, oledStockTicker, cydFollowerTracker)
 
     fun byId(id: DeviceTypeId): DeviceType =
         all.firstOrNull { it.id == id } ?: cydStockTicker

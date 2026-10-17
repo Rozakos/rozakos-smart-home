@@ -5,6 +5,7 @@ import com.rozakos.home.domain.model.DeviceCategory
 import com.rozakos.home.domain.model.DeviceTypeId
 import com.rozakos.home.domain.repository.DeviceRepository
 import java.util.UUID
+import kotlinx.coroutines.flow.first
 
 class AddDeviceUseCase(
     private val repository: DeviceRepository,
@@ -18,6 +19,10 @@ class AddDeviceUseCase(
         uid: String? = null,
         firmware: String? = null,
     ) {
+        val existing = repository.devices.first()
+        require(existing.none { it.ipAddress == ipAddress.trim() || (uid != null && it.uid == uid) }) {
+            "This device is already in your home. Open its existing card instead."
+        }
         repository.addDevice(
             Device(
                 id = UUID.randomUUID().toString(),

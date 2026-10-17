@@ -12,6 +12,12 @@ import com.rozakos.home.data.local.DeviceDataStore
 import com.rozakos.home.domain.repository.DeviceRepository
 import com.rozakos.home.domain.repository.DeviceStatusChecker
 import com.rozakos.home.domain.usecase.AddDeviceUseCase
+import com.rozakos.home.data.market.SymbolCatalog
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import java.io.File
 
 class RozakosHomeApp : Application() {
     lateinit var container: AppContainer
@@ -24,6 +30,15 @@ class RozakosHomeApp : Application() {
 }
 
 class AppContainer(application: Application) {
+    val symbolCatalog = SymbolCatalog(File(application.filesDir, "symbol-catalog"), bundledJson = {
+        application.assets.open("symbol_catalog.json").bufferedReader().use { it.readText() }
+    })
+    private val catalogScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        catalogScope.launch { runCatching { symbolCatalog.refreshIfNeeded() } }
+    }
+
     val deviceRepository: DeviceRepository =
         LocalDeviceRepository(DeviceDataStore(application.applicationContext))
 

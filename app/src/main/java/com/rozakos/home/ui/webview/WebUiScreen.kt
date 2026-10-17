@@ -8,6 +8,11 @@ import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.webkit.WebResourceResponse
+import androidx.activity.compose.BackHandler
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,13 +53,16 @@ fun WebUiScreen(
     var webView: WebView? by remember { mutableStateOf(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var canGoBack by remember { mutableStateOf(false) }
+    val requestBack: () -> Unit = { if (webView?.canGoBack() == true) webView?.goBack() else onBack() }
+    BackHandler(enabled = canGoBack, onBack = requestBack)
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text(title) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = requestBack) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -104,6 +112,7 @@ fun WebUiScreen(
 
                             override fun onPageFinished(view: WebView?, url: String?) {
                                 loading = false
+                                canGoBack = view?.canGoBack() == true
                             }
 
                             override fun onReceivedError(
@@ -113,7 +122,13 @@ fun WebUiScreen(
                             ) {
                                 if (request?.isForMainFrame == true) {
                                     loading = false
-                                    error = webError?.description?.toString() ?: "Device unreachable."
+                                    error = "Check that the device is powered on and your phone is on the same Wi-Fi network."
+                                }
+                            }
+                            override fun onReceivedHttpError(view: WebView?, request: WebResourceRequest?, response: WebResourceResponse?) {
+                                if (request?.isForMainFrame == true) {
+                                    loading = false
+                                    error = "The device couldn't open this page (HTTP ${response?.statusCode}). Try again or return to device controls."
                                 }
                             }
                         }
@@ -121,6 +136,7 @@ fun WebUiScreen(
                         loadUrl(url)
                     }
                 },
+                onRelease = { it.stopLoading(); it.destroy(); webView = null },
             )
 
             if (loading) {
@@ -128,19 +144,23 @@ fun WebUiScreen(
             }
 
             error?.let { message ->
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 Column(
                     modifier = Modifier
-                        .align(Alignment.Center)
+                        .fillMaxSize()
                         .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        text = "Unable to load device WebUI",
+                        text = "Can't reach device settings",
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text(
                         text = message,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(vertical = 12.dp),
                     )
                     Button(
                         onClick = {
@@ -151,6 +171,7 @@ fun WebUiScreen(
                     ) {
                         Text("Retry")
                     }
+                }
                 }
             }
         }
