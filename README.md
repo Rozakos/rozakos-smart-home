@@ -2,7 +2,7 @@
 
 Rozakos Home is a local-first Android hub for Rozakos ESP32 / IoT devices, with
 discovery, live data, native ticker controls and access to each device's web UI.
-Current version: **0.3.4**. See [release notes](CHANGELOG.md).
+Current version: **0.3.5**. See [release notes](CHANGELOG.md).
 
 ## What It Does
 
