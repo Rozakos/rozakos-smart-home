@@ -57,6 +57,17 @@ class UiFlowRecoveryTest {
         assertEquals(0, repo.writes); assertTrue(vm.uiState.value.error!!.contains("already in your home"))
     }
 
+    @Test fun aDifferentDeviceOnAStaleCardsOldIpCanStillBeFoundAndAdded() = runTest {
+        val repo = Repository(listOf(DEVICE))
+        // DHCP handed the old card's IP to another board, which reports its own stable id.
+        val other = DiscoveredDevice("CYD", DEVICE.ipAddress, DEVICE.type, "other-uid", "1.1.0", DiscoveredDevice.Source.Mdns)
+        val vm = AddDeviceViewModel(AddDeviceUseCase(repo), Discovery(flowOf(listOf(other))), repo)
+        advanceUntilIdle()
+        assertEquals(listOf(other), vm.uiState.value.nearby); assertEquals(0, vm.uiState.value.alreadyAddedCount)
+        vm.addDiscovered(other, "Kitchen CYD", ""); advanceUntilIdle()
+        assertEquals(1, repo.writes); assertTrue(vm.uiState.value.saved)
+    }
+
     @Test fun storageFailureShowsAnErrorAndAllowsRetry() = runTest {
         val repo = Repository().apply { fail = true }
         val vm = AddDeviceViewModel(AddDeviceUseCase(repo), Discovery(), repo)

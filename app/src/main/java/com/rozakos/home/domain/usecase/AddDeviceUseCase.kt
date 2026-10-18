@@ -20,7 +20,7 @@ class AddDeviceUseCase(
         firmware: String? = null,
     ) {
         val existing = repository.devices.first()
-        require(existing.none { it.ipAddress == ipAddress.trim() || (uid != null && it.uid == uid) }) {
+        require(existing.none { it.matches(ipAddress, uid) }) {
             "This device is already in your home. Open its existing card instead."
         }
         repository.addDevice(

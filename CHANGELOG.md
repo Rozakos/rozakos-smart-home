@@ -1,5 +1,12 @@
 # Changelog
 
+
+## 0.3.5 — 2026-10-18
+
+- A different device that DHCP gave a stale card's old IP is no longer hidden from Nearby or
+  rejected as a duplicate; stable device ids decide when both sides report one.
+- Switching devices while a refresh is in flight can no longer show the previous device's data.
+
 ## 0.3.4 — 2026-10-17
 
 - Recognize OLED and dot-matrix stock tickers for discovery, live data and native

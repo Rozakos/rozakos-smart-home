@@ -76,6 +76,7 @@ class DeviceDetailViewModel(
     private val live = MutableStateFlow(Live())
     private val symbolSearch = MutableStateFlow(SymbolSearchState())
     private var searchJob: Job? = null
+    private var refreshJob: Job? = null
 
     val uiState: StateFlow<DeviceDetailUiState> =
         combine(repository.devices, selectedDeviceId, live, symbolSearch) { devices, id, l, search ->
@@ -94,16 +95,22 @@ class DeviceDetailViewModel(
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DeviceDetailUiState())
 
     fun load(deviceId: String) {
+        if (selectedDeviceId.value != deviceId) {
+            // A refresh for the previous device must neither block nor overwrite this one.
+            refreshJob?.cancel(); refreshJob = null
+            live.value = Live()
+        }
         selectedDeviceId.value = deviceId
         refresh()
     }
 
     fun refresh() {
         if (live.value.checking) return
+        val deviceId = selectedDeviceId.value
         live.update { it.copy(checking = true) }
-        viewModelScope.launch {
+        refreshJob = viewModelScope.launch {
             try {
-            val device = repository.devices.first().firstOrNull { it.id == selectedDeviceId.value } ?: run {
+            val device = repository.devices.first().firstOrNull { it.id == deviceId } ?: run {
                 live.update { it.copy(checking = false) }; return@launch
             }
             val check = statusChecker.check(device)
@@ -127,15 +134,16 @@ class DeviceDetailViewModel(
             val names = watchlist?.draft?.symbols?.let { symbols ->
                 runCatching { symbolSearcher.namesFor(symbols) }.getOrDefault(emptyMap())
             }.orEmpty()
+            if (selectedDeviceId.value != deviceId) return@launch
             live.update { current ->
                 Live(check.status, false, info, state,
                     current.watchlist?.takeIf { it.dirty || it.saving || it.newSymbol.isNotBlank() } ?: watchlist,
                     current.symbolNames + names, dataError)
             }
             } catch (cancelled: CancellationException) { throw cancelled
-            } catch (_: Exception) { live.update { it.copy(status = ConnectionStatus.Offline,
+            } catch (_: Exception) { if (selectedDeviceId.value == deviceId) live.update { it.copy(status = ConnectionStatus.Offline,
                 dataError = "Couldn't refresh the device. Check your connection and try again.") }
-            } finally { live.update { it.copy(checking = false) } }
+            } finally { if (selectedDeviceId.value == deviceId) live.update { it.copy(checking = false) } }
         }
     }
 

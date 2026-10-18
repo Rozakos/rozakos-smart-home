@@ -41,6 +41,28 @@ class DeviceDetailSearchTest {
         assertEquals(1, api.writes)
     }
 
+    @Test fun switchingDevicesMidRefreshNeverShowsThePreviousDevicesData() = runTest {
+        val repo = object : DeviceRepository by Repository() {
+            override val devices = MutableStateFlow(listOf(
+                Device("oled", "OLED", DeviceCategory.StockTickers, DeviceTypeId.OledStockTicker, "192.168.1.58"),
+                Device("cyd", "CYD", DeviceCategory.StockTickers, DeviceTypeId.OledStockTicker, "192.168.1.59")))
+        }
+        val slowChecker = object : DeviceStatusChecker {
+            override suspend fun check(device: Device): DeviceCheck {
+                delay(if (device.id == "oled") 1000 else 100)
+                return DeviceCheck(ConnectionStatus.Online, DeviceInfo(device.id, device.customName, "oled_stock_ticker",
+                    null, null, "/settings", setOf(DeviceInfo.CAP_SETTINGS_API)))
+            }
+        }
+        val vm = DeviceDetailViewModel(repo, slowChecker, FakeApi(), SymbolSearcher { emptyList() })
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { vm.uiState.collect {} }
+        vm.load("oled"); advanceTimeBy(300); runCurrent() // OLED still checking.
+        vm.load("cyd"); advanceUntilIdle()
+        assertEquals("cyd", vm.uiState.value.device!!.id)
+        assertEquals("cyd", vm.uiState.value.info!!.id)
+        assertFalse(vm.uiState.value.checking)
+    }
+
     @Test fun rapidQueriesCancelOldResultsAndClearingSearchClearsTheList() = runTest {
         val vm = DeviceDetailViewModel(Repository(), checker, FakeApi(), SymbolSearcher { query ->
             delay(if (query == "Nvidia") 1000 else 10)

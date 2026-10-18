@@ -62,9 +62,7 @@ class AddDeviceViewModel(
                 .catch { _uiState.update { it.copy(scanError = "Couldn't scan this network. Check Wi-Fi, then try again or use Manual.") } }
                 .onCompletion { _uiState.update { it.copy(scanning = false, scannedOnce = true) } }
                 .collect { found ->
-                    val fresh = found.filterNot { d ->
-                        known.any { k -> (d.uid != null && k.uid == d.uid) || k.ipAddress == d.ipAddress }
-                    }
+                    val fresh = found.filterNot { d -> known.any { k -> k.matches(d.ipAddress, d.uid) } }
                     _uiState.update { it.copy(nearby = fresh, alreadyAddedCount = found.size - fresh.size) }
                 }
         }
